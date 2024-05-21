@@ -29,67 +29,59 @@ class Dataset_Game(torchData):
         with open(root, 'r') as file:
             games_json = json.load(file)
         
-        img_h = 256
-        img_w = 512
+        self.game_number = 0
+        temp_game = []
+        for game in games_json:
+            if game.get('sentiment') is None:
+                continue
+            self.game_number += 1
+            temp_game.append(game)
         
+        games_json = temp_game
         
         self.all_images = []
         self.all_labels = []
+        self.all_idxs = []
         
-        
-        self.game_number = 0
-        self.get_img_paths(games_json)
+        img_h = 256
+        img_w = 512
         
         if mode == 'train':
             self.transform = transforms.Compose([
-                #transforms.Resize((img_h, img_w)),
-                #transforms.RandomHorizontalFlip(),      # data augmentation
-                #transforms.RandomRotation(-10, 10),     # data augmentation
+                transforms.Resize((img_h, img_w)),
+                transforms.RandomHorizontalFlip(),             # data augmentation
+                transforms.RandomRotation(degrees=(-10, 10)),  # data augmentation
                 transforms.ToTensor()
             ])
             games_json = games_json[:int(self.game_number*0.6)]
         elif mode == 'val':
             self.transform = transforms.Compose([
-                #transforms.Resize((img_h, img_w)),
+                transforms.Resize((img_h, img_w)),
                 transforms.ToTensor()
             ])
             games_json = games_json[int(self.game_number*0.6):int(self.game_number*0.8)]
-        else:
+        elif mode=='test':
             self.transform = transforms.Compose([
-                #transforms.Resize((img_h, img_w)),
+                transforms.Resize((img_h, img_w)),
                 transforms.ToTensor()
             ])
             games_json = games_json[int(self.game_number*0.8):]
+        self.get_img_paths(games_json)
         
     def get_img_paths(self, json_file):
         # iterate through json file, read the paths and the images, return them
         for game in json_file:
-            if int(game['price']) >= 2500:
-                continue
-            self.game_number += 1
-            if self.mode != 'test':
-                for frame in game['screenshots']:
-                    # read image from the path directly
-                    frame = frame[0:-3] + 'webp'
-                    frame = os.path.join(self.root, 'imgori', frame)
-                    # image = imgloader(frame)
-                    # image = self.transform(image)
-                    self.all_images.append(frame) # read jpg image
-                    
-                    # TODO
-                self.all_labels.append(int(game['price']))
-            else:
-                temp_img = []
-                temp_label = []
-                for frame in game['screenshots']:
-                    frame = frame[0:-3] + 'webp'
-                    frame = os.path.join(self.root, 'imgori', frame)
-                    image = imgloader(frame)
-                    image = self.transform(image)
-                    temp_img.append(image)
-                    temp_label.append(int(game['price']))
-                self.all_images.append(temp_img)
-                self.all_labels.append(temp_label)
+        #     if self.mode != 'test':
+            for frame in game['screenshots']:
+                # read image from the path directly
+                frame = frame[0:-3] + 'webp'
+                frame = os.path.join(self.root, 'imgori', frame)
+                # image = imgloader(frame)
+                # image = self.transform(image)
+                self.all_images.append(frame) # read jpg image
+                sentiment_label = self.map_sentiment(game['sentiment'])
+                self.all_labels.append(sentiment_label)
+                self.all_idxs.append(game['appid'])
         
 
     def __len__(self):
@@ -99,7 +91,21 @@ class Dataset_Game(torchData):
         img = imgloader(self.all_images[index])
         img = self.transform(img)
         img /= 255.0
-        return img, self.all_labels[index]
+        return img, self.all_labels[index], self.all_idxs[index]
+    
+    def map_sentiment(self, sentiment):
+        SENTIMENT_MAP = {
+            'Overwhelmingly Positive': 8,
+            'Very Positive': 7,
+            'Positive': 6,
+            'Mostly Positive': 5,
+            'Mixed': 4,
+            'Mostly Negative': 3,
+            'Negative': 2,
+            'Very Negative': 1,
+            'Overwhelmingly Negative': 0
+        }
+        return SENTIMENT_MAP.get(sentiment, 0)    
     
     
 
